@@ -1,35 +1,34 @@
 #!/usr/bin/env python3
 """
-Connect to IMAP inbox, run each message through spamc, print spam/not spam.
-Requires: IMAP_HOST, IMAP_USER, IMAP_PASS. spamd must be running (docker compose up -d).
+Connect to IMAP inbox, run each message through rspamd, print spam/not spam.
+Requires: IMAP_HOST, IMAP_USER, IMAP_PASS. rspamd must be running (docker compose up).
+Optional: RSPAMD_URL (default http://localhost:11333).
 """
 
 import imaplib
+import json
 import os
-import subprocess
+import urllib.error
+import urllib.request
 from email import policy
 from email.parser import BytesParser
-from pathlib import Path
 
 LIMIT = 10
+RSPAMD_TIMEOUT = 30
 
 
-def _spamc_cmd():
-    compose_dir = Path(__file__).resolve().parent
-    return [
-        "docker",
-        "compose",
-        "-f",
-        str(compose_dir / "docker-compose.yml"),
-        "run",
-        "--rm",
-        "-T",
-        "spamd",
-        "spamc",
-        "-h",
-        "spamd",
-        "-E",
-    ], compose_dir
+def check_rspamd(raw: bytes) -> str:
+    base = os.environ.get("RSPAMD_URL", "http://localhost:11333").rstrip("/")
+    url = f"{base}/checkv2"
+    req = urllib.request.Request(url, data=raw, method="POST")
+    req.add_header("Content-Length", str(len(raw)))
+    try:
+        with urllib.request.urlopen(req, timeout=RSPAMD_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode())
+    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError) as e:
+        raise RuntimeError(e) from e
+    action = data.get("action", "no action")
+    return "spam" if action != "no action" else "not spam"
 
 
 def main():
@@ -71,19 +70,11 @@ def main():
         raw = part[1] if isinstance(part, tuple) and len(part) > 1 else part
         if raw is None:
             raw = b""
-        cmd, cwd = _spamc_cmd()
         try:
-            r = subprocess.run(
-                cmd,
-                input=raw,
-                capture_output=True,
-                timeout=30,
-                cwd=cwd,
-            )
-        except (FileNotFoundError, subprocess.TimeoutExpired) as e:
-            print(f"UID {uid}: spamc failed: {e}")
+            result = check_rspamd(raw)
+        except RuntimeError as e:
+            print(f"UID {uid}: rspamd failed: {e}")
             continue
-        result = "spam" if r.returncode == 1 else "not spam"
         msg = BytesParser(policy=policy.default).parsebytes(raw)
         subject = msg.get("Subject", "(no subject)")
         print(f"UID {uid}: {result} — {subject}")
