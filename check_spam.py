@@ -2,7 +2,7 @@
 """
 Connect to IMAP inbox, run each message through rspamd, print spam/not spam.
 Requires: IMAP_HOST, IMAP_USER, IMAP_PASS. rspamd must be running (docker compose up).
-Optional: RSPAMD_URL (default http://localhost:11333).
+Optional: RSPAMD_URL (default http://localhost:11333), SPAM_FOLDER (default INBOX.Spam; use server's exact name, e.g. [Gmail]/Spam).
 """
 
 import imaplib
@@ -13,7 +13,6 @@ import urllib.request
 from email import policy
 from email.parser import BytesParser
 
-LIMIT = 10
 RSPAMD_TIMEOUT = 30
 
 
@@ -50,7 +49,6 @@ def main():
     try:
         _, data = conn.uid("search", None, "ALL")
         uids = data[0].split()
-        uids = uids[-LIMIT:] if len(uids) >= LIMIT else uids
     except imaplib.IMAP4.error as e:
         print(f"IMAP search error: {e}")
         conn.logout()
@@ -86,7 +84,16 @@ def main():
             typ, _ = conn.uid("STORE", uid, "+FLAGS", "($Junk)")
             if typ != "OK":
                 print(f"UID {uid}: set $Junk failed")
+            spam_folder = os.environ.get("SPAM_FOLDER", "INBOX.Spam")
+            typ, data = conn.uid("COPY", uid, spam_folder)
+            if typ != "OK":
+                raw = data[0] if data else b""
+                msg = raw.decode() if isinstance(raw, bytes) else str(raw)
+                print(f"UID {uid}: copy to {spam_folder!r} failed: {typ} — {msg}")
+            else:
+                conn.uid("STORE", uid, "+FLAGS", "(\\Deleted)")
 
+    conn.expunge()
     conn.logout()
 
 
