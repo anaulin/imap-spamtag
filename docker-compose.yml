@@ -1,6 +1,5 @@
 services:
-  spamd:
-    image: docker.io/tiredofit/spamassassin:latest
+  rspamd:
+    image: docker.io/rspamd/rspamd:latest
     ports:
-      - "783:783"
-    # Same image has spamc; use it via: docker compose run --rm -T spamd spamc -h spamd -E
+      - "11333:11333"
