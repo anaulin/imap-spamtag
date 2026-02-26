@@ -16,5 +16,5 @@ cp .env.example .env   # edit with IMAP_HOST, IMAP_USER, IMAP_PASS
 
 ## Run
 
-1. Start spamd: `docker compose up
+1. Start spamd: `docker compose up`
 2. Run the checker: `python check_spam.py`
