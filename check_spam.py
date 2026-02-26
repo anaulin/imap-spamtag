@@ -1,14 +1,35 @@
 #!/usr/bin/env python3
 """
 Connect to IMAP inbox, run each message through spamc, print spam/not spam.
-Requires: IMAP_HOST, IMAP_USER, IMAP_PASS. spamd must be running.
+Requires: IMAP_HOST, IMAP_USER, IMAP_PASS. spamd must be running (docker compose up -d).
 """
 
 import imaplib
 import os
 import subprocess
+from email import policy
+from email.parser import BytesParser
+from pathlib import Path
 
 LIMIT = 10
+
+
+def _spamc_cmd():
+    compose_dir = Path(__file__).resolve().parent
+    return [
+        "docker",
+        "compose",
+        "-f",
+        str(compose_dir / "docker-compose.yml"),
+        "run",
+        "--rm",
+        "-T",
+        "spamd",
+        "spamc",
+        "-h",
+        "spamd",
+        "-E",
+    ], compose_dir
 
 
 def main():
@@ -50,21 +71,22 @@ def main():
         raw = part[1] if isinstance(part, tuple) and len(part) > 1 else part
         if raw is None:
             raw = b""
+        cmd, cwd = _spamc_cmd()
         try:
-            print(raw)
-            print("Skipping spamc for now")
-            # r = subprocess.run(
-            #     ["spamc", "-E"],
-            #     input=raw,
-            #     capture_output=True,
-            #     timeout=30,
-            # )
+            r = subprocess.run(
+                cmd,
+                input=raw,
+                capture_output=True,
+                timeout=30,
+                cwd=cwd,
+            )
         except (FileNotFoundError, subprocess.TimeoutExpired) as e:
             print(f"UID {uid}: spamc failed: {e}")
             continue
-        # result = "spam" if r.returncode == 1 else "not spam"
-        # result = "not spam"
-        # print(f"UID {uid}: {result}")
+        result = "spam" if r.returncode == 1 else "not spam"
+        msg = BytesParser(policy=policy.default).parsebytes(raw)
+        subject = msg.get("Subject", "(no subject)")
+        print(f"UID {uid}: {result} — {subject}")
 
     conn.logout()
 
