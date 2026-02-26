@@ -1,0 +1,12 @@
+[tools]
+uv = "latest"
+
+[env]
+_.file = ".env"
+
+[settings]
+experimental = true
+python.uv_venv_auto = true
+
+[tasks]
+fix = "ruff format && ruff check --fix"

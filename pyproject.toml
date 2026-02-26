@@ -1,0 +1,11 @@
+[project]
+name = "imap-spamtag"
+version = "0.1"
+requires-python = ">=3.14"
+dependencies = []
+
+[dependency-groups]
+dev = [ "ruff" ]
+
+[tool.ruff.lint]
+extend-select = ["I"]
