@@ -42,7 +42,7 @@ def main():
     try:
         conn = imaplib.IMAP4_SSL(host)
         conn.login(user, password)
-        conn.select("INBOX", readonly=True)
+        conn.select("INBOX", readonly=False)
     except imaplib.IMAP4.error as e:
         print(f"IMAP error: {e}")
         raise SystemExit(1)
@@ -78,6 +78,14 @@ def main():
         msg = BytesParser(policy=policy.default).parsebytes(raw)
         subject = msg.get("Subject", "(no subject)")
         print(f"UID {uid}: {result} — {subject}")
+
+        if result == "spam":
+            typ, _ = conn.uid("STORE", uid, "-FLAGS", "($NotJunk)")
+            if typ != "OK":
+                print(f"UID {uid}: clear $NotJunk failed")
+            typ, _ = conn.uid("STORE", uid, "+FLAGS", "($Junk)")
+            if typ != "OK":
+                print(f"UID {uid}: set $Junk failed")
 
     conn.logout()
 
